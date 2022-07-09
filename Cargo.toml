@@ -1,7 +1,8 @@
 [package]
-name = "raycasting"
+name = "raycasting-term"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-winterm = "0.2.0"
+winterm = "0.2"
+crossterm = "0.23"
