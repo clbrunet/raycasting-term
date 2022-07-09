@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-winterm = "0.2"
-crossterm = "0.23"
+winterm = "0.3.0"
+crossterm = "0.24.0"

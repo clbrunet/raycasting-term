@@ -2,7 +2,8 @@ use std::time::Duration;
 
 use crossterm::{
     event::{poll, read, Event::Key, KeyCode, KeyEvent},
-    Result, style::Color,
+    style::Color,
+    Result,
 };
 use winterm::Window;
 
@@ -18,14 +19,14 @@ impl<T> Vec2<T> {
 }
 
 static MAP: [[u8; 8]; 8] = [
-    [1,1,1,1,1,1,1,1,],
-    [1,0,0,0,0,0,0,1,],
-    [1,0,0,0,0,0,0,1,],
-    [1,0,0,0,0,2,0,1,],
-    [1,0,0,0,0,0,0,1,],
-    [1,0,0,0,0,0,0,1,],
-    [1,0,0,0,0,0,0,1,],
-    [1,1,1,1,1,1,1,1,],
+    [1, 1, 1, 1, 1, 1, 1, 1],
+    [1, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 2, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 1],
+    [1, 0, 0, 0, 0, 0, 0, 1],
+    [1, 1, 1, 1, 1, 1, 1, 1],
 ];
 
 pub struct Raycasting {
@@ -36,9 +37,9 @@ pub struct Raycasting {
 }
 
 impl Raycasting {
-    pub fn new() -> Result<Self> { 
+    fn new() -> Result<Self> {
         Ok(Raycasting {
-            window: Window::new(72, 58)?,
+            window: Window::new(58, 72)?,
             should_stop: false,
             player: (Vec2::new(4., 4.), 0.),
             horizontal_fov: 60f64.to_radians(),
@@ -66,9 +67,9 @@ impl Raycasting {
     }
 
     fn render(&mut self) {
-        let angle_increment = self.horizontal_fov / 71.;
+        let angle_increment = self.horizontal_fov / (self.window.width() - 1) as f64;
         let mut ray_angle = self.player.1 - self.horizontal_fov / 2.;
-        for x in 0..72 {
+        for x in 0..self.window.width() {
             let mut hit = Vec2::new(self.player.0.x, self.player.0.y);
             hit.x += ray_angle.cos() * 0.05;
             hit.y += ray_angle.sin() * 0.05;
@@ -82,10 +83,10 @@ impl Raycasting {
                 distance += 0.05;
             }
             distance *= (self.player.1 - ray_angle).cos();
-            let height = ((50f64 / distance).round() as u16).min(58);
-            let ceiling_border = ((58 - height) as f32 / 2.).round() as u16;
-            for y in 0..58 {
-                self.window.set_pixel(x, y, Color::Black);
+            let height = ((50f64 / distance).round() as u16).min(self.window.height());
+            let ceiling_border = ((self.window.height() - height) as f32 / 2.).round() as u16;
+            for y in 0..self.window.height() {
+                self.window.set_pixel(y, x, Color::Black);
             }
             let color = match MAP[hit.y as usize][hit.x as usize] {
                 1 => Color::White,
@@ -93,13 +94,13 @@ impl Raycasting {
                 _ => Color::Black,
             };
             for y in ceiling_border..(ceiling_border + height) {
-                self.window.set_pixel(x, y, color);
+                self.window.set_pixel(y, x, color);
             }
             ray_angle += angle_increment;
         }
     }
 
-    pub fn run(&mut self) -> Result<()> {
+    fn run(&mut self) -> Result<()> {
         loop {
             while poll(Duration::from_secs(0))? {
                 let event = read()?;
@@ -119,8 +120,6 @@ impl Raycasting {
 
 fn main() -> Result<()> {
     let mut raycasting = Raycasting::new()?;
-    crossterm::terminal::enable_raw_mode()?;
     raycasting.run()?;
-    crossterm::terminal::disable_raw_mode()?;
     Ok(())
 }
