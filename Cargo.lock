@@ -230,6 +230,7 @@ name = "raycasting-term"
 version = "0.1.0"
 dependencies = [
  "crossterm",
+ "nalgebra",
  "winterm",
 ]
 

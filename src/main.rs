@@ -1,22 +1,12 @@
 use std::time::Duration;
 
+use nalgebra::{Point2, Vector2};
+use winterm::Window;
 use crossterm::{
     event::{poll, read, Event::Key, KeyCode, KeyEvent},
     style::Color,
     Result,
 };
-use winterm::Window;
-
-pub struct Vec2<T> {
-    pub x: T,
-    pub y: T,
-}
-
-impl<T> Vec2<T> {
-    pub fn new(x: T, y: T) -> Self {
-        Vec2 { x, y }
-    }
-}
 
 static MAP: [[u8; 8]; 8] = [
     [1, 1, 1, 1, 1, 1, 1, 1],
@@ -32,7 +22,7 @@ static MAP: [[u8; 8]; 8] = [
 pub struct Raycasting {
     window: Window,
     should_stop: bool,
-    player: (Vec2<f64>, f64),
+    player: (Point2<f64>, f64),
     horizontal_fov: f64,
 }
 
@@ -41,7 +31,7 @@ impl Raycasting {
         Ok(Raycasting {
             window: Window::new(58, 72)?,
             should_stop: false,
-            player: (Vec2::new(4., 4.), 0.),
+            player: (Point2::new(4., 4.), 0.),
             horizontal_fov: 60f64.to_radians(),
         })
     }
@@ -50,27 +40,35 @@ impl Raycasting {
         if key_event.code == KeyCode::Esc {
             self.should_stop = true;
         }
-        if key_event.code == KeyCode::Char('w') {
-            self.player.0.x += self.player.1.cos() * 0.1;
-            self.player.0.y += self.player.1.sin() * 0.1;
-        }
-        if key_event.code == KeyCode::Char('s') {
-            self.player.0.x -= self.player.1.cos() * 0.1;
-            self.player.0.y -= self.player.1.sin() * 0.1;
-        }
+
         if key_event.code == KeyCode::Left {
             self.player.1 -= 1f64.to_radians();
         }
         if key_event.code == KeyCode::Right {
             self.player.1 += 1f64.to_radians();
         }
+
+        let mut movement: Vector2<f64> = Vector2::zeros();
+        if key_event.code == KeyCode::Char('w') {
+            movement.x += self.player.1.cos();
+            movement.y += self.player.1.sin();
+        }
+        if key_event.code == KeyCode::Char('s') {
+            movement.x -= self.player.1.cos();
+            movement.y -= self.player.1.sin();
+        }
+        if movement == Vector2::zeros() {
+            return;
+        }
+        movement.set_magnitude(0.1);
+        self.player.0 += movement;
     }
 
     fn render(&mut self) {
         let angle_increment = self.horizontal_fov / (self.window.width() - 1) as f64;
         let mut ray_angle = self.player.1 - self.horizontal_fov / 2.;
         for x in 0..self.window.width() {
-            let mut hit = Vec2::new(self.player.0.x, self.player.0.y);
+            let mut hit = self.player.0;
             hit.x += ray_angle.cos() * 0.05;
             hit.y += ray_angle.sin() * 0.05;
             let mut distance = 0.05;

@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 winterm = "0.3.0"
 crossterm = "0.24.0"
+nalgebra = "0.31.0"
