@@ -1,5 +1,7 @@
+use std::f64::consts::FRAC_PI_2;
+
 use crossterm::{event::KeyCode, style::Color, Result};
-use nalgebra::{Point2, Vector2};
+use nalgebra::Point2;
 use winterm::Window;
 
 static MAP: [[u8; 8]; 8] = [
@@ -45,27 +47,29 @@ impl Raycasting {
     }
 
     fn continuous_update(&mut self) {
-        if self.window.get_key(KeyCode::Left) {
-            self.player.angle -= 1f64.to_radians();
-        }
-        if self.window.get_key(KeyCode::Right) {
-            self.player.angle += 1f64.to_radians();
-        }
-
-        let mut movement: Vector2<f64> = Vector2::zeros();
         if self.window.get_key(KeyCode::Char('w')) {
-            movement.x += self.player.angle.cos();
-            movement.y += self.player.angle.sin();
+            self.player.position.x += self.player.angle.cos();
+            self.player.position.y += self.player.angle.sin();
         }
         if self.window.get_key(KeyCode::Char('s')) {
-            movement.x -= self.player.angle.cos();
-            movement.y -= self.player.angle.sin();
+            self.player.position.x -= self.player.angle.cos();
+            self.player.position.y -= self.player.angle.sin();
         }
-        if movement == Vector2::zeros() {
-            return;
+        if self.window.get_key(KeyCode::Char('a')) {
+            self.player.position.x -= (self.player.angle + FRAC_PI_2).cos();
+            self.player.position.y -= (self.player.angle + FRAC_PI_2).sin();
         }
-        movement.set_magnitude(0.1);
-        self.player.position += movement;
+        if self.window.get_key(KeyCode::Char('d')) {
+            self.player.position.x += (self.player.angle + FRAC_PI_2).cos();
+            self.player.position.y += (self.player.angle + FRAC_PI_2).sin();
+        }
+
+        if self.window.get_key(KeyCode::Left) {
+            self.player.angle -= 3f64.to_radians();
+        }
+        if self.window.get_key(KeyCode::Right) {
+            self.player.angle += 3f64.to_radians();
+        }
     }
 
     fn render(&mut self) -> Result<()> {
