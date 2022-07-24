@@ -1,4 +1,4 @@
-use std::f64::consts::FRAC_PI_2;
+use std::f64;
 
 use crossterm::{event::KeyCode, style::Color, Result};
 use nalgebra::Point2;
@@ -20,6 +20,30 @@ struct Player {
     angle: f64,
 }
 
+impl Player {
+    fn translate(&mut self, x: f64, y: f64) {
+        const DISPLACEMENT_FROM_WALL: f64 = 0.000001;
+
+        self.position.x += x;
+        if MAP[self.position.y as usize][self.position.x as usize] != 0 {
+            if x > 0_f64 {
+                self.position.x = self.position.x.floor() - DISPLACEMENT_FROM_WALL;
+            } else {
+                self.position.x = self.position.x.ceil() + DISPLACEMENT_FROM_WALL;
+            }
+        }
+
+        self.position.y += y;
+        if MAP[self.position.y as usize][self.position.x as usize] != 0 {
+            if y > 0_f64 {
+                self.position.y = self.position.y.floor() - DISPLACEMENT_FROM_WALL;
+            } else {
+                self.position.y = self.position.y.ceil() + DISPLACEMENT_FROM_WALL;
+            }
+        }
+    }
+}
+
 struct Raycasting {
     window: Window,
     player: Player,
@@ -35,7 +59,7 @@ impl Raycasting {
                 position: Point2::new(4., 4.),
                 angle: 0.,
             },
-            horizontal_fov: 60f64.to_radians(),
+            horizontal_fov: 60_f64.to_radians(),
             should_stop: false,
         })
     }
@@ -48,27 +72,31 @@ impl Raycasting {
 
     fn continuous_update(&mut self) {
         if self.window.get_key(KeyCode::Char('w')) {
-            self.player.position.x += self.player.angle.cos();
-            self.player.position.y += self.player.angle.sin();
+            self.player
+                .translate(self.player.angle.cos(), self.player.angle.sin());
         }
         if self.window.get_key(KeyCode::Char('s')) {
-            self.player.position.x -= self.player.angle.cos();
-            self.player.position.y -= self.player.angle.sin();
+            self.player
+                .translate(-self.player.angle.cos(), -self.player.angle.sin());
         }
         if self.window.get_key(KeyCode::Char('a')) {
-            self.player.position.x -= (self.player.angle + FRAC_PI_2).cos();
-            self.player.position.y -= (self.player.angle + FRAC_PI_2).sin();
+            self.player.translate(
+                -(self.player.angle + f64::consts::FRAC_PI_2).cos(),
+                -(self.player.angle + f64::consts::FRAC_PI_2).sin(),
+            );
         }
         if self.window.get_key(KeyCode::Char('d')) {
-            self.player.position.x += (self.player.angle + FRAC_PI_2).cos();
-            self.player.position.y += (self.player.angle + FRAC_PI_2).sin();
+            self.player.translate(
+                (self.player.angle + f64::consts::FRAC_PI_2).cos(),
+                (self.player.angle + f64::consts::FRAC_PI_2).sin(),
+            );
         }
 
         if self.window.get_key(KeyCode::Left) {
-            self.player.angle -= 3f64.to_radians();
+            self.player.angle -= 3_f64.to_radians();
         }
         if self.window.get_key(KeyCode::Right) {
-            self.player.angle += 3f64.to_radians();
+            self.player.angle += 3_f64.to_radians();
         }
     }
 
@@ -89,7 +117,7 @@ impl Raycasting {
                 distance += 0.05;
             }
             distance *= (self.player.angle - ray_angle).cos();
-            let height = ((50f64 / distance).round() as u16).min(self.window.height());
+            let height = ((50_f64 / distance).round() as u16).min(self.window.height());
             let ceiling_border = ((self.window.height() - height) as f32 / 2.).round() as u16;
             for y in 0..self.window.height() {
                 self.window.set_pixel(y, x, Color::Black);
