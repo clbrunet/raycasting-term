@@ -413,9 +413,9 @@ checksum = "c811ca4a8c853ef420abd8592ba53ddbbac90410fab6903b3e79972a631f7680"
 
 [[package]]
 name = "winterm"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9148b0dfac81defe9ee34e370382e0f95c1af14b8116bbc0db0921e2df59a0a3"
+checksum = "3c5beac826942a92fbf51101ff0efc6929f74cb57ea2751a480292ed75e3cf66"
 dependencies = [
  "crossterm",
  "nalgebra",

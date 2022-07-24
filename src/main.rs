@@ -1,10 +1,4 @@
-use std::time::Duration;
-
-use crossterm::{
-    event::{poll, read, Event::Key, KeyCode, KeyEvent},
-    style::Color,
-    Result,
-};
+use crossterm::{event::KeyCode, style::Color, Result};
 use nalgebra::{Point2, Vector2};
 use winterm::Window;
 
@@ -26,42 +20,44 @@ struct Player {
 
 struct Raycasting {
     window: Window,
-    should_stop: bool,
     player: Player,
     horizontal_fov: f64,
+    should_stop: bool,
 }
 
 impl Raycasting {
     fn new() -> Result<Self> {
         Ok(Raycasting {
             window: Window::new(45, 80)?,
-            should_stop: false,
             player: Player {
                 position: Point2::new(4., 4.),
                 angle: 0.,
             },
             horizontal_fov: 60f64.to_radians(),
+            should_stop: false,
         })
     }
 
-    fn on_key_event(&mut self, key_event: KeyEvent) {
-        if key_event.code == KeyCode::Esc {
+    fn instantaneous_update(&mut self) {
+        if self.window.get_key(KeyCode::Esc) {
             self.should_stop = true;
         }
+    }
 
-        if key_event.code == KeyCode::Left {
+    fn continuous_update(&mut self) {
+        if self.window.get_key(KeyCode::Left) {
             self.player.angle -= 1f64.to_radians();
         }
-        if key_event.code == KeyCode::Right {
+        if self.window.get_key(KeyCode::Right) {
             self.player.angle += 1f64.to_radians();
         }
 
         let mut movement: Vector2<f64> = Vector2::zeros();
-        if key_event.code == KeyCode::Char('w') {
+        if self.window.get_key(KeyCode::Char('w')) {
             movement.x += self.player.angle.cos();
             movement.y += self.player.angle.sin();
         }
-        if key_event.code == KeyCode::Char('s') {
+        if self.window.get_key(KeyCode::Char('s')) {
             movement.x -= self.player.angle.cos();
             movement.y -= self.player.angle.sin();
         }
@@ -72,7 +68,7 @@ impl Raycasting {
         self.player.position += movement;
     }
 
-    fn render(&mut self) {
+    fn render(&mut self) -> Result<()> {
         let angle_increment = self.horizontal_fov / (self.window.width() - 1) as f64;
         let mut ray_angle = self.player.angle - self.horizontal_fov / 2.;
         for x in 0..self.window.width() {
@@ -104,21 +100,16 @@ impl Raycasting {
             }
             ray_angle += angle_increment;
         }
+        self.window.draw()?;
+        Ok(())
     }
 
     fn run(&mut self) -> Result<()> {
-        loop {
-            while poll(Duration::from_secs(0))? {
-                let event = read()?;
-                if let Key(key_event) = event {
-                    self.on_key_event(key_event);
-                }
-            }
-            if self.should_stop {
-                break;
-            }
-            self.render();
-            self.window.draw()?;
+        while self.should_stop == false {
+            self.window.poll_events()?;
+            self.instantaneous_update();
+            self.continuous_update();
+            self.render()?;
         }
         Ok(())
     }
