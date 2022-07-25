@@ -70,33 +70,37 @@ impl Raycasting {
         }
     }
 
-    fn continuous_update(&mut self) {
+    fn continuous_update(&mut self, delta_time: f64) {
         if self.window.get_key(KeyCode::Char('w')) {
-            self.player
-                .translate(self.player.angle.cos(), self.player.angle.sin());
+            self.player.translate(
+                self.player.angle.cos() * 5_f64 * delta_time,
+                self.player.angle.sin() * delta_time,
+            );
         }
         if self.window.get_key(KeyCode::Char('s')) {
-            self.player
-                .translate(-self.player.angle.cos(), -self.player.angle.sin());
+            self.player.translate(
+                -self.player.angle.cos() * 5_f64 * delta_time,
+                -self.player.angle.sin() * 5_f64 * delta_time,
+            );
         }
         if self.window.get_key(KeyCode::Char('a')) {
             self.player.translate(
-                -(self.player.angle + f64::consts::FRAC_PI_2).cos(),
-                -(self.player.angle + f64::consts::FRAC_PI_2).sin(),
+                -(self.player.angle + f64::consts::FRAC_PI_2).cos() * 5_f64 * delta_time,
+                -(self.player.angle + f64::consts::FRAC_PI_2).sin() * 5_f64 * delta_time,
             );
         }
         if self.window.get_key(KeyCode::Char('d')) {
             self.player.translate(
-                (self.player.angle + f64::consts::FRAC_PI_2).cos(),
-                (self.player.angle + f64::consts::FRAC_PI_2).sin(),
+                (self.player.angle + f64::consts::FRAC_PI_2).cos() * 5_f64 * delta_time,
+                (self.player.angle + f64::consts::FRAC_PI_2).sin() * 5_f64 * delta_time,
             );
         }
 
         if self.window.get_key(KeyCode::Left) {
-            self.player.angle -= 3_f64.to_radians();
+            self.player.angle -= 50_f64.to_radians() * delta_time;
         }
         if self.window.get_key(KeyCode::Right) {
-            self.player.angle += 3_f64.to_radians();
+            self.player.angle += 50_f64.to_radians() * delta_time;
         }
     }
 
@@ -140,7 +144,7 @@ impl Raycasting {
         while self.should_stop == false {
             self.window.poll_events()?;
             self.instantaneous_update();
-            self.continuous_update();
+            self.continuous_update(0.02);
             self.render()?;
         }
         Ok(())
