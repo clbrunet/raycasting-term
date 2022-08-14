@@ -234,7 +234,7 @@ impl Raycasting {
             self.render_column(x, ray_angle)?;
             ray_angle = get_normalized_radians_angle(ray_angle + angle_increment);
         }
-        self.window.draw()?;
+        self.window.redraw()?;
         Ok(())
     }
 
