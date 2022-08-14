@@ -1,4 +1,4 @@
-use std::f64;
+use std::{f64, time::Instant};
 
 use crossterm::{event::KeyCode, style::Color, Result};
 use nalgebra::{Point2, Vector2};
@@ -81,35 +81,36 @@ impl Raycasting {
     fn continuous_update(&mut self, delta_time: f64) {
         if self.window.get_key(KeyCode::Char('w')) {
             self.player.translate(
-                self.player.angle.cos() * 5_f64 * delta_time,
-                -self.player.angle.sin() * 5_f64 * delta_time,
+                self.player.angle.cos() * 30_f64 * delta_time,
+                -self.player.angle.sin() * 30_f64 * delta_time,
             );
+        } else {
         }
         if self.window.get_key(KeyCode::Char('s')) {
             self.player.translate(
-                -self.player.angle.cos() * 5_f64 * delta_time,
-                self.player.angle.sin() * 5_f64 * delta_time,
+                -self.player.angle.cos() * 30_f64 * delta_time,
+                self.player.angle.sin() * 30_f64 * delta_time,
             );
         }
         if self.window.get_key(KeyCode::Char('a')) {
             self.player.translate(
-                (self.player.angle + f64::consts::FRAC_PI_2).cos() * 5_f64 * delta_time,
-                -(self.player.angle + f64::consts::FRAC_PI_2).sin() * 5_f64 * delta_time,
+                (self.player.angle + f64::consts::FRAC_PI_2).cos() * 30_f64 * delta_time,
+                -(self.player.angle + f64::consts::FRAC_PI_2).sin() * 30_f64 * delta_time,
             );
         }
         if self.window.get_key(KeyCode::Char('d')) {
             self.player.translate(
-                -(self.player.angle + f64::consts::FRAC_PI_2).cos() * 5_f64 * delta_time,
-                (self.player.angle + f64::consts::FRAC_PI_2).sin() * 5_f64 * delta_time,
+                -(self.player.angle + f64::consts::FRAC_PI_2).cos() * 30_f64 * delta_time,
+                (self.player.angle + f64::consts::FRAC_PI_2).sin() * 30_f64 * delta_time,
             );
         }
 
         if self.window.get_key(KeyCode::Left) {
-            self.player.angle += 50_f64.to_radians() * delta_time;
+            self.player.angle += 300_f64.to_radians() * delta_time;
             self.player.angle = get_normalized_radians_angle(self.player.angle);
         }
         if self.window.get_key(KeyCode::Right) {
-            self.player.angle -= 50_f64.to_radians() * delta_time;
+            self.player.angle -= 300_f64.to_radians() * delta_time;
             self.player.angle = get_normalized_radians_angle(self.player.angle);
         }
     }
@@ -161,16 +162,32 @@ impl Raycasting {
         let color = match MAP[map_coordinates.y][map_coordinates.x] {
             1 => {
                 if is_vertical {
-                    Color::Rgb { r: 0xa0, g: 0x00, b: 0x00 }
+                    Color::Rgb {
+                        r: 0xa0,
+                        g: 0x00,
+                        b: 0x00,
+                    }
                 } else {
-                    Color::Rgb { r: 0x80, g: 0x00, b: 0x00 }
+                    Color::Rgb {
+                        r: 0x80,
+                        g: 0x00,
+                        b: 0x00,
+                    }
                 }
             }
             2 => {
                 if is_vertical {
-                    Color::Rgb { r: 0x00, g: 0x00, b: 0xa0 }
+                    Color::Rgb {
+                        r: 0x00,
+                        g: 0x00,
+                        b: 0xa0,
+                    }
                 } else {
-                    Color::Rgb { r: 0x00, g: 0x00, b: 0x80 }
+                    Color::Rgb {
+                        r: 0x00,
+                        g: 0x00,
+                        b: 0x80,
+                    }
                 }
             }
             _ => Color::Black,
@@ -182,13 +199,29 @@ impl Raycasting {
         let wall_start = ((self.window.height() - height) as f32 / 2_f32).round() as u16;
         let wall_end = wall_start + height;
         for y in 0..wall_start {
-            self.window.set_pixel(y, x, Color::Rgb { r: 0x64, g: 0x64, b: 0x64 });
+            self.window.set_pixel(
+                y,
+                x,
+                Color::Rgb {
+                    r: 0x64,
+                    g: 0x64,
+                    b: 0x64,
+                },
+            );
         }
         for y in wall_start..wall_end {
             self.window.set_pixel(y, x, color);
         }
         for y in wall_end..self.window.height() {
-            self.window.set_pixel(y, x, Color::Rgb { r: 0xBA, g: 0x92, b: 0x6C });
+            self.window.set_pixel(
+                y,
+                x,
+                Color::Rgb {
+                    r: 0xBA,
+                    g: 0x92,
+                    b: 0x6C,
+                },
+            );
         }
         Ok(())
     }
@@ -206,10 +239,19 @@ impl Raycasting {
     }
 
     fn run(&mut self) -> Result<()> {
+        let start_time = Instant::now();
+        let mut consumned_seconds = 0_f64;
         while !self.should_stop {
             self.window.poll_events()?;
             self.instantaneous_update();
-            self.continuous_update(0.02);
+            let elapsed_time = start_time.elapsed().as_secs_f64() - consumned_seconds;
+            consumned_seconds += elapsed_time;
+            let delta_time = if elapsed_time < 0.05 {
+                elapsed_time
+            } else {
+                0.05
+            };
+            self.continuous_update(delta_time);
             self.render()?;
         }
         Ok(())
