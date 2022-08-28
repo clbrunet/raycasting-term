@@ -1,8 +1,10 @@
-use std::{f64, time::Instant};
+use std::{cmp, f64, time::Instant};
 
 use crossterm::{event::KeyCode, style::Color, Result};
-use nalgebra::{Point2, Vector2};
+use nalgebra::{ArrayStorage, Const, Matrix, Point2, Vector2, Vector4};
 use winterm::Window;
+
+type Matrix16<T> = Matrix<T, Const<16>, Const<16>, ArrayStorage<T, 16, 16>>;
 
 static MAP: [[u8; 8]; 8] = [
     [1, 1, 1, 1, 1, 1, 1, 1],
@@ -26,9 +28,18 @@ fn get_normalized_radians_angle(angle: f64) -> f64 {
 struct Player {
     position: Point2<f64>,
     angle: f64,
+    horizontal_fov: f64,
 }
 
 impl Player {
+    fn new(x: f64, y: f64, angle: f64, horizontal_fov: f64) -> Self {
+        Self {
+            position: Point2::new(x, y),
+            angle,
+            horizontal_fov,
+        }
+    }
+
     fn translate(&mut self, x: f64, y: f64) {
         const DISPLACEMENT_FROM_WALL: f64 = 0.000001;
 
@@ -52,22 +63,92 @@ impl Player {
     }
 }
 
+struct Sprite {
+    position: Point2<f64>,
+    image_index: usize,
+}
+
+impl Sprite {
+    fn new(position: Point2<f64>, image_index: usize) -> Self {
+        Self {
+            position,
+            image_index,
+        }
+    }
+
+    fn get_sorted_seen_sprites<'a>(
+        sprites: &'a Vec<Self>,
+        player: &Player,
+        window: &Window,
+    ) -> Vec<SeenSprite<'a>> {
+        let mut seen_sprites = Vec::new();
+        for sprite in sprites {
+            let player_to_sprite = sprite.position - player.position;
+            let player_to_sprite_angle =
+                get_normalized_radians_angle((-player_to_sprite.y).atan2(player_to_sprite.x));
+            let mut angle = get_normalized_radians_angle(player_to_sprite_angle - player.angle);
+            if angle > f64::consts::PI {
+                angle -= f64::consts::TAU;
+            }
+            angle = -angle;
+            let projection_plane_distance =
+                (window.width() as f64 / 2_f64) / (player.horizontal_fov / 2_f64).tan();
+            let x_from_center = angle.tan() * projection_plane_distance;
+            let x = (window.width() as f64 / 2_f64 + x_from_center).round();
+            if -f64::consts::FRAC_PI_2 < angle
+                && angle < f64::consts::FRAC_PI_2
+                && 0_f64 <= x
+                && (x < window.width().into())
+            {
+                seen_sprites.push(SeenSprite::new(
+                    sprite,
+                    x as u16,
+                    player_to_sprite.magnitude() * angle.cos(),
+                ));
+            }
+        }
+        seen_sprites.sort_unstable_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap());
+        seen_sprites
+    }
+}
+
+struct SeenSprite<'a> {
+    sprite: &'a Sprite,
+    x: u16,
+    distance: f64,
+}
+
+impl<'a> SeenSprite<'a> {
+    fn new(sprite: &'a Sprite, x: u16, distance: f64) -> Self {
+        Self {
+            sprite,
+            x,
+            distance,
+        }
+    }
+}
+
 struct Raycasting {
     window: Window,
     player: Player,
-    horizontal_fov: f64,
+    sprites: Vec<Sprite>,
+    images: Vec<Matrix16<Vector4<u8>>>,
     should_stop: bool,
 }
 
 impl Raycasting {
     fn new() -> Result<Self> {
-        Ok(Raycasting {
+        Ok(Self {
             window: Window::new(45, 80)?,
-            player: Player {
-                position: Point2::new(3_f64, 4_f64),
-                angle: 45_f64.to_radians(),
-            },
-            horizontal_fov: 60_f64.to_radians(),
+            player: Player::new(3_f64, 4_f64, 180_f64.to_radians(), 60_f64.to_radians()),
+            sprites: vec![
+                Sprite::new(Point2::new(5_f64, 3_f64), 0),
+                Sprite::new(Point2::new(4_f64, 6_f64), 0),
+                Sprite::new(Point2::new(1_f64, 3_f64), 0),
+                Sprite::new(Point2::new(1_f64, 4_f64), 0),
+                Sprite::new(Point2::new(1_f64, 5_f64), 0),
+            ],
+            images: vec![Matrix16::from([[Vector4::new(255, 0, 0, 255); 16]; 16])],
             should_stop: false,
         })
     }
@@ -192,7 +273,9 @@ impl Raycasting {
             }
             _ => Color::Black,
         };
-        let height = std::cmp::min(
+        // TODO: remove the cmp::min from height and min, max wall_start and wall_end instead (as
+        // in sprites rendering)
+        let height = cmp::min(
             (self.window.height() as f64 / distance).round() as u16,
             self.window.height(),
         );
@@ -227,12 +310,65 @@ impl Raycasting {
     }
 
     fn render(&mut self) -> Result<()> {
-        let angle_increment = -(self.horizontal_fov / (self.window.width() - 1) as f64);
+        let angle_increment = -(self.player.horizontal_fov / (self.window.width() - 1) as f64);
         let mut ray_angle =
-            get_normalized_radians_angle(self.player.angle + self.horizontal_fov / 2_f64);
+            get_normalized_radians_angle(self.player.angle + self.player.horizontal_fov / 2_f64);
         for x in 0..self.window.width() {
             self.render_column(x, ray_angle)?;
             ray_angle = get_normalized_radians_angle(ray_angle + angle_increment);
+        }
+        let sorted_seen_sprites =
+            Sprite::get_sorted_seen_sprites(&self.sprites, &self.player, &self.window);
+        for seen_sprite in sorted_seen_sprites {
+            // TODO: add and check a zbuffer
+            let image = &self.images[seen_sprite.sprite.image_index];
+            let height = f64::round(self.window.height() as f64 / seen_sprite.distance) as u16;
+            let start_y = cmp::max(
+                0,
+                f32::round((self.window.height() as i32 - height as i32) as f32 / 2_f32) as u16,
+            );
+            let end_y = cmp::min(
+                self.window.height(),
+                f32::round((self.window.height() + height) as f32 / 2_f32) as u16,
+            );
+            let image_y_step = image.nrows() as f64 / height as f64;
+            let mut image_y = f64::max(
+                0_f64,
+                -f64::round((self.window.height() as i32 - height as i32) as f64 / 2_f64)
+                    * image_y_step,
+            );
+            let width =
+                f32::round(height as f32 * image.ncols() as f32 / image.nrows() as f32) as u16;
+            let start_x = cmp::max(
+                0,
+                f32::round(seen_sprite.x as f32 - (width as f32 / 2_f32) + 0.1) as u16,
+            );
+            let end_x = cmp::min(
+                self.window.width(),
+                f32::round(seen_sprite.x as f32 + (width as f32 / 2_f32)) as u16,
+            );
+            let image_x_step = image.ncols() as f64 / width as f64;
+            let start_image_x = f64::max(
+                0_f64,
+                -f64::round(seen_sprite.x as f64 - (width as f64 / 2_f64) + 0.1) * image_x_step,
+            );
+            for y in start_y..end_y {
+                let mut image_x = start_image_x;
+                for x in start_x..end_x {
+                    let color = &image[(image_y as usize, image_x as usize)];
+                    if color.w != u8::MAX {
+                        continue;
+                    }
+                    let terminal_color = Color::Rgb {
+                        r: color.x,
+                        g: color.y,
+                        b: color.z,
+                    };
+                    self.window.set_pixel(y, x, terminal_color);
+                    image_x += image_x_step;
+                }
+                image_y += image_y_step;
+            }
         }
         self.window.redraw()?;
         Ok(())
@@ -241,15 +377,16 @@ impl Raycasting {
     fn run(&mut self) -> Result<()> {
         let start_time = Instant::now();
         let mut consumned_seconds = 0_f64;
+        let max_elapsed_time = 0.03;
         while !self.should_stop {
             self.window.poll_events()?;
             self.instantaneous_update();
             let elapsed_time = start_time.elapsed().as_secs_f64() - consumned_seconds;
             consumned_seconds += elapsed_time;
-            let delta_time = if elapsed_time < 0.05 {
+            let delta_time = if elapsed_time < max_elapsed_time {
                 elapsed_time
             } else {
-                0.05
+                max_elapsed_time
             };
             self.continuous_update(delta_time);
             self.render()?;
