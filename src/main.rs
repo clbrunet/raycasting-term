@@ -1,4 +1,8 @@
-use std::{cmp, f64, time::Instant};
+use std::{
+    cmp::{self, Ord},
+    f64,
+    time::Instant,
+};
 
 use crossterm::{event::KeyCode, style::Color, Result};
 use nalgebra::{ArrayStorage, Const, Matrix, Point2, Vector2, Vector4};
@@ -93,16 +97,12 @@ impl Sprite {
             angle = -angle;
             let projection_plane_distance =
                 (window.width() as f64 / 2_f64) / (player.horizontal_fov / 2_f64).tan();
-            let x_from_center = angle.tan() * projection_plane_distance;
-            let x = (window.width() as f64 / 2_f64 + x_from_center).round();
-            if -f64::consts::FRAC_PI_2 < angle
-                && angle < f64::consts::FRAC_PI_2
-                && 0_f64 <= x
-                && (x < window.width().into())
-            {
+            let center_x_from_center = angle.tan() * projection_plane_distance;
+            let center_x = f64::round(window.width() as f64 / 2_f64 + center_x_from_center);
+            if -f64::consts::FRAC_PI_2 < angle && angle < f64::consts::FRAC_PI_2 {
                 seen_sprites.push(SeenSprite::new(
                     sprite,
-                    x as u16,
+                    center_x as i16,
                     player_to_sprite.magnitude() * angle.cos(),
                 ));
             }
@@ -114,15 +114,15 @@ impl Sprite {
 
 struct SeenSprite<'a> {
     sprite: &'a Sprite,
-    x: u16,
+    center_x: i16,
     distance: f64,
 }
 
 impl<'a> SeenSprite<'a> {
-    fn new(sprite: &'a Sprite, x: u16, distance: f64) -> Self {
+    fn new(sprite: &'a Sprite, center_x: i16, distance: f64) -> Self {
         Self {
             sprite,
-            x,
+            center_x,
             distance,
         }
     }
@@ -317,9 +317,9 @@ impl Raycasting {
             self.render_column(x, ray_angle)?;
             ray_angle = get_normalized_radians_angle(ray_angle + angle_increment);
         }
-        let sorted_seen_sprites =
-            Sprite::get_sorted_seen_sprites(&self.sprites, &self.player, &self.window);
-        for seen_sprite in sorted_seen_sprites {
+        for seen_sprite in
+            Sprite::get_sorted_seen_sprites(&self.sprites, &self.player, &self.window)
+        {
             // TODO: add and check a zbuffer
             let image = &self.images[seen_sprite.sprite.image_index];
             let height = f64::round(self.window.height() as f64 / seen_sprite.distance) as u16;
@@ -341,16 +341,18 @@ impl Raycasting {
                 f32::round(height as f32 * image.ncols() as f32 / image.nrows() as f32) as u16;
             let start_x = cmp::max(
                 0,
-                f32::round(seen_sprite.x as f32 - (width as f32 / 2_f32) + 0.1) as u16,
+                f32::round(seen_sprite.center_x as f32 - (width as f32 / 2_f32) + 0.1) as u16,
             );
-            let end_x = cmp::min(
-                self.window.width(),
-                f32::round(seen_sprite.x as f32 + (width as f32 / 2_f32)) as u16,
-            );
+            let end_x = Ord::clamp(
+                f32::round(seen_sprite.center_x as f32 + (width as f32 / 2_f32)) as i16,
+                0,
+                self.window.width() as i16,
+            ) as u16;
             let image_x_step = image.ncols() as f64 / width as f64;
             let start_image_x = f64::max(
                 0_f64,
-                -f64::round(seen_sprite.x as f64 - (width as f64 / 2_f64) + 0.1) * image_x_step,
+                -f64::round(seen_sprite.center_x as f64 - (width as f64 / 2_f64) + 0.1)
+                    * image_x_step,
             );
             for y in start_y..end_y {
                 let mut image_x = start_image_x;
