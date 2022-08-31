@@ -108,7 +108,7 @@ impl Sprite {
                 ));
             }
         }
-        seen_sprites.sort_unstable_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap());
+        seen_sprites.sort_unstable_by(|a, b| f64::partial_cmp(&b.distance, &a.distance).unwrap());
         seen_sprites
     }
 }
