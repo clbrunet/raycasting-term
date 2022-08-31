@@ -5,7 +5,7 @@ use std::{
 };
 
 use crossterm::{event::KeyCode, style::Color, Result};
-use nalgebra::{ArrayStorage, Const, Matrix, Point2, Vector2, Vector4};
+use nalgebra::{ArrayStorage, Const, Matrix, Point2, Vector2, Vector4, Vector3};
 use winterm::Window;
 
 type Matrix16<T> = Matrix<T, Const<16>, Const<16>, ArrayStorage<T, 16, 16>>;
@@ -67,6 +67,7 @@ impl Player {
     }
 }
 
+#[derive(Debug)]
 struct Sprite {
     position: Point2<f64>,
     image_index: usize,
@@ -112,6 +113,7 @@ impl Sprite {
     }
 }
 
+#[derive(Debug)]
 struct SeenSprite<'a> {
     sprite: &'a Sprite,
     center_x: i16,
@@ -136,8 +138,38 @@ struct Raycasting {
     should_stop: bool,
 }
 
+fn fill_test_image(image: &mut Matrix16<Vector4<u8>>) {
+    let colors = vec![
+        Vector3::new(255.0, 0.0, 0.0),
+        Vector3::new(255.0, 63.0, 0.0),
+        Vector3::new(255.0, 127.0, 0.0),
+        Vector3::new(255.0, 191.0, 0.0),
+        Vector3::new(255.0, 255.0, 0.0),
+        Vector3::new(191.0, 255.0, 0.0),
+        Vector3::new(127.0, 255.0, 0.0),
+        Vector3::new(63.0, 255.0, 0.0),
+        Vector3::new(0.0, 255.0, 0.0),
+        Vector3::new(0.0, 255.0, 127.0),
+        Vector3::new(0.0, 255.0, 255.0),
+        Vector3::new(0.0, 127.0, 255.0),
+        Vector3::new(0.0, 0.0, 255.0),
+        Vector3::new(127.0, 0.0, 255.0),
+        Vector3::new(255.0, 0.0, 255.0),
+        Vector3::new(255.0, 0.0, 127.0),
+    ];
+    for x in 0..image.ncols() {
+        let multiplier = ((x + 1) as f64 / image.ncols() as f64) * 0.75 + 0.25;
+        for y in 0..image.nrows() {
+            let color = colors[y] * multiplier;
+            image[(y, x)] = Vector4::new(color.x as u8, color.y as u8, color.z as u8, 255);
+        }
+    }
+}
+
 impl Raycasting {
     fn new() -> Result<Self> {
+        let mut image = Matrix16::zeros();
+        fill_test_image(&mut image);
         Ok(Self {
             window: Window::new(45, 80)?,
             player: Player::new(3_f64, 4_f64, 180_f64.to_radians(), 60_f64.to_radians()),
@@ -148,7 +180,7 @@ impl Raycasting {
                 Sprite::new(Point2::new(1_f64, 4_f64), 0),
                 Sprite::new(Point2::new(1_f64, 5_f64), 0),
             ],
-            images: vec![Matrix16::from([[Vector4::new(255, 0, 0, 255); 16]; 16])],
+            images: vec![image],
             should_stop: false,
         })
     }
