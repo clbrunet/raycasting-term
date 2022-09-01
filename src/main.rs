@@ -5,7 +5,7 @@ use std::{
 };
 
 use crossterm::{event::KeyCode, style::Color, Result};
-use nalgebra::{ArrayStorage, Const, Matrix, Point2, Vector2, Vector4, Vector3};
+use nalgebra::{ArrayStorage, Const, Matrix, Point2, Vector2, Vector3, Vector4};
 use winterm::Window;
 
 type Matrix16<T> = Matrix<T, Const<16>, Const<16>, ArrayStorage<T, 16, 16>>;
@@ -305,14 +305,15 @@ impl Raycasting {
             }
             _ => Color::Black,
         };
-        // TODO: remove the cmp::min from height and min, max wall_start and wall_end instead (as
-        // in sprites rendering)
-        let height = cmp::min(
-            (self.window.height() as f64 / distance).round() as u16,
-            self.window.height(),
+        let height = f64::round(self.window.height() as f64 / distance) as u16;
+        let wall_start = cmp::max(
+            0,
+            f32::round((self.window.height() as i32 - height as i32) as f32 / 2_f32) as u16,
         );
-        let wall_start = ((self.window.height() - height) as f32 / 2_f32).round() as u16;
-        let wall_end = wall_start + height;
+        let wall_end = cmp::min(
+            self.window.height(),
+            f32::round((self.window.height() as i32 + height as i32) as f32 / 2_f32) as u16,
+        );
         for y in 0..wall_start {
             self.window.set_pixel(
                 y,
