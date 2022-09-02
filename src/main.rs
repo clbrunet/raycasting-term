@@ -135,6 +135,7 @@ struct Raycasting {
     player: Player,
     sprites: Vec<Sprite>,
     images: Vec<Matrix16<Vector4<u8>>>,
+    z_buffer: Vec<f64>,
     should_stop: bool,
 }
 
@@ -168,19 +169,19 @@ fn fill_test_image(image: &mut Matrix16<Vector4<u8>>) {
 
 impl Raycasting {
     fn new() -> Result<Self> {
+        let height = 45;
+        let width = 80;
         let mut image = Matrix16::zeros();
         fill_test_image(&mut image);
         Ok(Self {
-            window: Window::new(45, 80)?,
+            window: Window::new(height, width)?,
             player: Player::new(3_f64, 4_f64, 180_f64.to_radians(), 60_f64.to_radians()),
             sprites: vec![
-                Sprite::new(Point2::new(5_f64, 3_f64), 0),
                 Sprite::new(Point2::new(4_f64, 6_f64), 0),
-                Sprite::new(Point2::new(1_f64, 3_f64), 0),
-                Sprite::new(Point2::new(1_f64, 4_f64), 0),
-                Sprite::new(Point2::new(1_f64, 5_f64), 0),
+                Sprite::new(Point2::new(2_f64, 4_f64), 0),
             ],
             images: vec![image],
+            z_buffer: vec![0.0; width.into()],
             should_stop: false,
         })
     }
@@ -272,6 +273,7 @@ impl Raycasting {
             }
         };
         let distance = euclidian_distance * (self.player.angle - ray_angle).cos();
+        self.z_buffer[x as usize] = distance;
         let color = match MAP[map_coordinates.y][map_coordinates.x] {
             1 => {
                 if is_vertical {
@@ -365,7 +367,7 @@ impl Raycasting {
                 f32::round((self.window.height() + height) as f32 / 2_f32) as u16,
             );
             let image_y_step = image.nrows() as f64 / height as f64;
-            let mut image_y = f64::max(
+            let start_image_y = f64::max(
                 0_f64,
                 -f64::round((self.window.height() as i32 - height as i32) as f64 / 2_f64)
                     * image_y_step,
@@ -382,14 +384,20 @@ impl Raycasting {
                 self.window.width() as i16,
             ) as u16;
             let image_x_step = image.ncols() as f64 / width as f64;
-            let start_image_x = f64::max(
+            let mut image_x = f64::max(
                 0_f64,
                 -f64::round(seen_sprite.center_x as f64 - (width as f64 / 2_f64) + 0.1)
                     * image_x_step,
             );
-            for y in start_y..end_y {
-                let mut image_x = start_image_x;
-                for x in start_x..end_x {
+            for x in start_x..end_x {
+                if seen_sprite.distance > self.z_buffer[x as usize] {
+                    image_x += image_x_step;
+                    continue;
+                } else {
+                    self.z_buffer[x as usize] = seen_sprite.distance;
+                }
+                let mut image_y = start_image_y;
+                for y in start_y..end_y {
                     let color = &image[(image_y as usize, image_x as usize)];
                     if color.w != u8::MAX {
                         continue;
@@ -400,9 +408,9 @@ impl Raycasting {
                         b: color.z,
                     };
                     self.window.set_pixel(y, x, terminal_color);
-                    image_x += image_x_step;
+                    image_y += image_y_step;
                 }
-                image_y += image_y_step;
+                image_x += image_x_step;
             }
         }
         self.window.redraw()?;
