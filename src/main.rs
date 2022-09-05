@@ -10,6 +10,11 @@ use winterm::Window;
 
 type Matrix16<T> = Matrix<T, Const<16>, Const<16>, ArrayStorage<T, 16, 16>>;
 
+mod player;
+use player::Player;
+mod sprite;
+use sprite::Sprite;
+
 static MAP: [[u8; 8]; 8] = [
     [1, 1, 1, 1, 1, 1, 1, 1],
     [1, 0, 0, 0, 0, 0, 0, 1],
@@ -26,107 +31,6 @@ fn get_normalized_radians_angle(angle: f64) -> f64 {
         angle % f64::consts::TAU + f64::consts::TAU
     } else {
         angle % f64::consts::TAU
-    }
-}
-
-struct Player {
-    position: Point2<f64>,
-    angle: f64,
-    horizontal_fov: f64,
-}
-
-impl Player {
-    fn new(x: f64, y: f64, angle: f64, horizontal_fov: f64) -> Self {
-        Self {
-            position: Point2::new(x, y),
-            angle,
-            horizontal_fov,
-        }
-    }
-
-    fn translate(&mut self, x: f64, y: f64) {
-        const DISPLACEMENT_FROM_WALL: f64 = 0.000001;
-
-        self.position.x += x;
-        if MAP[self.position.y as usize][self.position.x as usize] != 0 {
-            if x > 0.0 {
-                self.position.x = self.position.x.floor() - DISPLACEMENT_FROM_WALL;
-            } else {
-                self.position.x = self.position.x.ceil() + DISPLACEMENT_FROM_WALL;
-            }
-        }
-
-        self.position.y += y;
-        if MAP[self.position.y as usize][self.position.x as usize] != 0 {
-            if y > 0.0 {
-                self.position.y = self.position.y.floor() - DISPLACEMENT_FROM_WALL;
-            } else {
-                self.position.y = self.position.y.ceil() + DISPLACEMENT_FROM_WALL;
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
-struct Sprite {
-    position: Point2<f64>,
-    image_index: usize,
-}
-
-impl Sprite {
-    fn new(position: Point2<f64>, image_index: usize) -> Self {
-        Self {
-            position,
-            image_index,
-        }
-    }
-
-    fn get_sorted_seen_sprites<'a>(
-        sprites: &'a Vec<Self>,
-        player: &Player,
-        window: &Window,
-    ) -> Vec<SeenSprite<'a>> {
-        let mut seen_sprites = Vec::new();
-        for sprite in sprites {
-            let player_to_sprite = sprite.position - player.position;
-            let player_to_sprite_angle =
-                get_normalized_radians_angle((-player_to_sprite.y).atan2(player_to_sprite.x));
-            let mut angle = get_normalized_radians_angle(player_to_sprite_angle - player.angle);
-            if angle > f64::consts::PI {
-                angle -= f64::consts::TAU;
-            }
-            angle = -angle;
-            let projection_plane_distance =
-                (window.width() as f64 / 2.0) / (player.horizontal_fov / 2.0).tan();
-            let center_x_from_center = angle.tan() * projection_plane_distance;
-            let center_x = (window.width() as f64 / 2.0 + center_x_from_center).round();
-            if -f64::consts::FRAC_PI_2 < angle && angle < f64::consts::FRAC_PI_2 {
-                seen_sprites.push(SeenSprite::new(
-                    sprite,
-                    center_x as i16,
-                    player_to_sprite.magnitude() * angle.cos(),
-                ));
-            }
-        }
-        seen_sprites.sort_unstable_by(|a, b| b.distance.partial_cmp(&a.distance).unwrap());
-        seen_sprites
-    }
-}
-
-#[derive(Debug)]
-struct SeenSprite<'a> {
-    sprite: &'a Sprite,
-    center_x: i16,
-    distance: f64,
-}
-
-impl<'a> SeenSprite<'a> {
-    fn new(sprite: &'a Sprite, center_x: i16, distance: f64) -> Self {
-        Self {
-            sprite,
-            center_x,
-            distance,
-        }
     }
 }
 
@@ -212,12 +116,16 @@ impl Raycasting {
         if self.window.get_key(KeyCode::Char('a')) {
             self.player.translate(
                 (self.player.angle + f64::consts::FRAC_PI_2).cos() * TRANSLATION_SPEED * delta_time,
-                -(self.player.angle + f64::consts::FRAC_PI_2).sin() * TRANSLATION_SPEED * delta_time,
+                -(self.player.angle + f64::consts::FRAC_PI_2).sin()
+                    * TRANSLATION_SPEED
+                    * delta_time,
             );
         }
         if self.window.get_key(KeyCode::Char('d')) {
             self.player.translate(
-                -(self.player.angle + f64::consts::FRAC_PI_2).cos() * TRANSLATION_SPEED * delta_time,
+                -(self.player.angle + f64::consts::FRAC_PI_2).cos()
+                    * TRANSLATION_SPEED
+                    * delta_time,
                 (self.player.angle + f64::consts::FRAC_PI_2).sin() * TRANSLATION_SPEED * delta_time,
             );
         }
