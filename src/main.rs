@@ -13,6 +13,7 @@ mod sprite;
 use player::Player;
 use rendering::render;
 use sprite::Sprite;
+use sprite::UpdateExt;
 
 static MAP: [[u8; 8]; 8] = [
     [1, 1, 1, 1, 1, 1, 1, 1],
@@ -76,17 +77,27 @@ impl Raycasting {
         let width = 80;
         let mut image = Matrix16::zeros();
         fill_test_image(&mut image);
-        Ok(Self {
+        let mut raycasting = Self {
             window: Window::new(height, width)?,
             player: Player::new(3.0, 4.0, 180.0_f64.to_radians(), 60.0_f64.to_radians()),
-            sprites: vec![
-                Sprite::new(Point2::new(4.0, 6.0), 0),
-                Sprite::new(Point2::new(2.0, 4.0), 0),
-            ],
+            sprites: Vec::new(),
             images: vec![image],
             z_buffer: vec![0.0; width.into()],
             should_stop: false,
-        })
+        };
+        raycasting.sprites.push(Sprite::new(
+            Point2::new(4.0, 6.0),
+            0,
+            &raycasting.player,
+            &raycasting.window,
+        ));
+        raycasting.sprites.push(Sprite::new(
+            Point2::new(2.0, 4.0),
+            0,
+            &raycasting.player,
+            &raycasting.window,
+        ));
+        Ok(raycasting)
     }
 
     fn instantaneous_update(&mut self) {
@@ -137,6 +148,8 @@ impl Raycasting {
             self.player.angle -= rotation_speed * delta_time;
             self.player.angle = get_normalized_radians_angle(self.player.angle);
         }
+
+        self.sprites.update(&self.player, &self.window);
     }
 
     fn run(&mut self) -> Result<()> {

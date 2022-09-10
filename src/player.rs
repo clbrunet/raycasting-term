@@ -1,6 +1,8 @@
+use std::f64;
+
 use nalgebra::Point2;
 
-use crate::MAP;
+use crate::{get_normalized_radians_angle, MAP};
 
 pub struct Player {
     pub position: Point2<f64>,
@@ -36,6 +38,19 @@ impl Player {
             } else {
                 self.position.y = self.position.y.ceil() + DISPLACEMENT_FROM_WALL;
             }
+        }
+    }
+
+    /// Get angle to position in [-pi; pi[
+    pub fn get_angle_to(&self, position: &Point2<f64>) -> f64 {
+        let player_to_position = position - self.position;
+        let player_to_position_world_angle = (-player_to_position.y).atan2(player_to_position.x);
+        let angle_from_player =
+            get_normalized_radians_angle(player_to_position_world_angle - self.angle);
+        if angle_from_player >= f64::consts::PI {
+            angle_from_player - f64::consts::TAU
+        } else {
+            angle_from_player
         }
     }
 }
