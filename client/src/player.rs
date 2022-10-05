@@ -1,8 +1,7 @@
 use std::f64;
 
+use common::{get_normalized_radians_angle, MAP};
 use nalgebra::Point2;
-
-use crate::{get_normalized_radians_angle, MAP};
 
 pub struct Player {
     pub position: Point2<f64>,

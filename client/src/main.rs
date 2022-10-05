@@ -1,46 +1,25 @@
-use std::{f64, time::Instant};
-
+use clap::Parser;
 use crossterm::{event::KeyCode, Result};
 use nalgebra::{ArrayStorage, Const, Matrix, Point2, Vector3, Vector4};
-use winterm::Window;
-
+use std::net::UdpSocket;
+use std::{f64, time::Instant};
 type Matrix16<T> = Matrix<T, Const<16>, Const<16>, ArrayStorage<T, 16, 16>>;
+use winterm::Window;
 
 mod player;
 mod rendering;
-mod sprite;
+mod window_sprite;
 
+use common::{get_normalized_radians_angle, sprite::Sprite};
 use player::Player;
 use rendering::render;
-use sprite::Sprite;
-use sprite::UpdateExt;
 
-static MAP: [[u8; 8]; 8] = [
-    [1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 2, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 1],
-    [1, 1, 1, 1, 1, 1, 1, 1],
-];
-
-fn get_normalized_radians_angle(angle: f64) -> f64 {
-    if angle.is_sign_negative() {
-        angle % f64::consts::TAU + f64::consts::TAU
-    } else {
-        angle % f64::consts::TAU
-    }
-}
-
-pub struct Raycasting {
-    window: Window,
-    player: Player,
-    sprites: Vec<Sprite>,
-    images: Vec<Matrix16<Vector4<u8>>>,
-    z_buffer: Vec<f64>,
-    should_stop: bool,
+/// raycasting-term client
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Server address (eg. "127.0.0.1:4242")
+    server_address: Option<String>,
 }
 
 fn fill_test_image(image: &mut Matrix16<Vector4<u8>>) {
@@ -71,33 +50,32 @@ fn fill_test_image(image: &mut Matrix16<Vector4<u8>>) {
     }
 }
 
+pub struct Raycasting {
+    window: Window,
+    player: Player,
+    sprites: Vec<Sprite>,
+    images: Vec<Matrix16<Vector4<u8>>>,
+    z_buffer: Vec<f64>,
+    should_stop: bool,
+}
+
 impl Raycasting {
     fn new() -> Result<Self> {
         let height = 45;
         let width = 80;
         let mut image = Matrix16::zeros();
         fill_test_image(&mut image);
-        let mut raycasting = Self {
+        Ok(Self {
             window: Window::new(height, width)?,
             player: Player::new(3.0, 4.0, 180.0_f64.to_radians(), 60.0_f64.to_radians()),
-            sprites: Vec::new(),
+            sprites: vec![
+                Sprite::new(Point2::new(4.0, 6.0), 0),
+                Sprite::new(Point2::new(2.0, 4.0), 0),
+            ],
             images: vec![image],
             z_buffer: vec![0.0; width.into()],
             should_stop: false,
-        };
-        raycasting.sprites.push(Sprite::new(
-            Point2::new(4.0, 6.0),
-            0,
-            &raycasting.player,
-            &raycasting.window,
-        ));
-        raycasting.sprites.push(Sprite::new(
-            Point2::new(2.0, 4.0),
-            0,
-            &raycasting.player,
-            &raycasting.window,
-        ));
-        Ok(raycasting)
+        })
     }
 
     fn instantaneous_update(&mut self) {
@@ -148,8 +126,6 @@ impl Raycasting {
             self.player.angle -= rotation_speed * delta_time;
             self.player.angle = get_normalized_radians_angle(self.player.angle);
         }
-
-        self.sprites.update(&self.player, &self.window);
     }
 
     fn run(&mut self) -> Result<()> {
@@ -174,6 +150,14 @@ impl Raycasting {
 }
 
 fn main() -> Result<()> {
+    let args = Args::parse();
+
+    if let Some(server_addr) = args.server_address {
+        let socket = UdpSocket::bind("0.0.0.0:0")?;
+        socket.connect(server_addr)?;
+        socket.send(&bincode::serialize(&Point2::new(3.5, 2.88)).unwrap())?;
+        return Ok(());
+    }
     let mut raycasting = Raycasting::new()?;
     raycasting.run()?;
     Ok(())

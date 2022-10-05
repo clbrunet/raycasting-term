@@ -1,0 +1,13 @@
+[package]
+name = "client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bincode.workspace = true
+common.path = "../common"
+clap.workspace = true
+crossterm = "0.24.0"
+nalgebra.workspace = true
+serde.workspace = true
+winterm = "0.5.0"
