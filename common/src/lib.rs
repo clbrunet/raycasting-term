@@ -13,7 +13,7 @@ pub static MAP: [[u8; 8]; 8] = [
     [1, 1, 1, 1, 1, 1, 1, 1],
 ];
 
-// TODO
+/// Get angle in [0; tau[
 pub fn get_normalized_radians_angle(mut angle: f64) -> f64 {
     if angle.is_sign_negative() {
         angle = angle % f64::consts::TAU + f64::consts::TAU;

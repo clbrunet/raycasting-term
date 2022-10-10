@@ -1,7 +1,8 @@
 use clap::Parser;
 use crossterm::{event::KeyCode, Result};
 use nalgebra::{ArrayStorage, Const, Matrix, Point2, Vector3, Vector4};
-use std::net::UdpSocket;
+use std::io;
+use std::net::{ToSocketAddrs, UdpSocket};
 use std::{f64, time::Instant};
 type Matrix16<T> = Matrix<T, Const<16>, Const<16>, ArrayStorage<T, 16, 16>>;
 use winterm::Window;
@@ -50,8 +51,28 @@ fn fill_test_image(image: &mut Matrix16<Vector4<u8>>) {
     }
 }
 
+pub struct Client {
+    socket: UdpSocket,
+    id: u32,
+}
+
+impl Client {
+    fn new<A: ToSocketAddrs>(addr: A, position: &Point2<f64>) -> io::Result<Self> {
+        let socket = UdpSocket::bind("0.0.0.0:0")?;
+        socket.connect(addr)?;
+        socket.send(&bincode::serialize(&position).unwrap())?;
+        // TODO: resend until id is received
+        let mut buf = [0; 128];
+        let len = socket.recv(&mut buf)?;
+        let id = bincode::deserialize(&buf[..len]).unwrap();
+        socket.set_nonblocking(true)?;
+        Ok(Self { socket, id })
+    }
+}
+
 pub struct Raycasting {
     window: Window,
+    client: Option<Client>,
     player: Player,
     sprites: Vec<Sprite>,
     images: Vec<Matrix16<Vector4<u8>>>,
@@ -60,28 +81,52 @@ pub struct Raycasting {
 }
 
 impl Raycasting {
-    fn new() -> Result<Self> {
+    fn new(server_address: Option<&str>) -> Result<Self> {
         let height = 45;
         let width = 80;
         let mut image = Matrix16::zeros();
         fill_test_image(&mut image);
+        let position = Point2::new(3.0, 4.0);
+        let (client, sprites) = match server_address {
+            Some(addr) => (Some(Client::new(addr, &position)?), vec![]),
+            None => (
+                None,
+                vec![
+                    Sprite::new(0, Point2::new(4.0, 6.0), 0),
+                    Sprite::new(1, Point2::new(6.9, 4.0), 0),
+                ],
+            ),
+        };
         Ok(Self {
             window: Window::new(height, width)?,
-            player: Player::new(3.0, 4.0, 180.0_f64.to_radians(), 60.0_f64.to_radians()),
-            sprites: vec![
-                Sprite::new(Point2::new(4.0, 6.0), 0),
-                Sprite::new(Point2::new(2.0, 4.0), 0),
-            ],
+            player: Player::new(position, 180.0_f64.to_radians(), 60.0_f64.to_radians()),
+            client,
+            sprites,
             images: vec![image],
             z_buffer: vec![0.0; width.into()],
             should_stop: false,
         })
     }
 
-    fn instantaneous_update(&mut self) {
+    fn instantaneous_update(&mut self) -> Result<()> {
         if self.window.get_key(KeyCode::Esc) {
             self.should_stop = true;
         }
+        if let Some(client) = &self.client {
+            let mut buf = [0; 4096];
+            match client.socket.recv(&mut buf) {
+                Ok(len) => {
+                    self.sprites = bincode::deserialize(&buf[..len]).unwrap();
+                    Ok(())
+                }
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => Ok(()),
+                Err(e) => Err(e),
+            }?;
+            client
+                .socket
+                .send(&bincode::serialize(&self.player.position).unwrap())?;
+        }
+        Ok(())
     }
 
     fn continuous_update(&mut self, delta_time: f64) {
@@ -134,7 +179,7 @@ impl Raycasting {
         let max_elapsed_time = 0.03;
         while !self.should_stop {
             self.window.poll_events()?;
-            self.instantaneous_update();
+            self.instantaneous_update()?;
             let elapsed_time = start_time.elapsed().as_secs_f64() - consumned_seconds;
             consumned_seconds += elapsed_time;
             let delta_time = if elapsed_time < max_elapsed_time {
@@ -152,13 +197,7 @@ impl Raycasting {
 fn main() -> Result<()> {
     let args = Args::parse();
 
-    if let Some(server_addr) = args.server_address {
-        let socket = UdpSocket::bind("0.0.0.0:0")?;
-        socket.connect(server_addr)?;
-        socket.send(&bincode::serialize(&Point2::new(3.5, 2.88)).unwrap())?;
-        return Ok(());
-    }
-    let mut raycasting = Raycasting::new()?;
+    let mut raycasting = Raycasting::new(args.server_address.as_deref())?;
     raycasting.run()?;
     Ok(())
 }

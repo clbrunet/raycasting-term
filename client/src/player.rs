@@ -10,16 +10,16 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn new(x: f64, y: f64, angle: f64, horizontal_fov: f64) -> Self {
+    pub fn new(position: Point2<f64>, angle: f64, horizontal_fov: f64) -> Self {
         Self {
-            position: Point2::new(x, y),
+            position,
             angle,
             horizontal_fov,
         }
     }
 
     pub fn translate(&mut self, x: f64, y: f64) {
-        const DISPLACEMENT_FROM_WALL: f64 = 0.000001;
+        const DISPLACEMENT_FROM_WALL: f64 = 0.1;
 
         self.position.x += x;
         if MAP[self.position.y as usize][self.position.x as usize] != 0 {

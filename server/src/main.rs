@@ -1,7 +1,12 @@
-use std::net::UdpSocket;
-
 use clap::Parser;
-use nalgebra::Point2;
+use std::{
+    collections::HashMap,
+    io,
+    net::{SocketAddr, ToSocketAddrs, UdpSocket},
+    time::{Duration, Instant},
+};
+
+use common::sprite::Sprite;
 
 /// raycasting-term server
 #[derive(Parser, Debug)]
@@ -11,19 +16,68 @@ struct Args {
     port: u16,
 }
 
+struct Server {
+    socket: UdpSocket,
+    clients: HashMap<SocketAddr, Sprite>,
+    next_id: u32,
+}
+
+impl Server {
+    fn new<A: ToSocketAddrs>(addr: A) -> io::Result<Self> {
+        let socket = UdpSocket::bind(addr)?;
+        socket.set_nonblocking(true)?;
+        Ok(Self {
+            socket,
+            clients: HashMap::new(),
+            next_id: 0,
+        })
+    }
+
+    fn handle_message(&mut self, buf: &[u8], addr: SocketAddr) -> std::io::Result<()> {
+        let position = bincode::deserialize(buf).unwrap();
+        match self.clients.get_mut(&addr) {
+            None => {
+                self.clients
+                    .insert(addr, Sprite::new(self.next_id, position, 0));
+                self.socket
+                    .send_to(&bincode::serialize(&self.next_id).unwrap(), addr)?;
+                // TODO: resend until id is received
+                self.next_id += 1;
+            }
+            Some(sprite) => {
+                sprite.position = position;
+            }
+        }
+        Ok(())
+    }
+
+    fn run(&mut self) -> io::Result<()> {
+        let mut buf = [0; 128];
+        let mut time = Instant::now();
+        let duration = Duration::from_secs_f64(1.0 / 30.0);
+
+        println!("Server running on {}", self.socket.local_addr()?);
+        loop {
+            match self.socket.recv_from(&mut buf) {
+                Ok((len, addr)) => self.handle_message(&buf[..len], addr),
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => Ok(()),
+                Err(e) => Err(e),
+            }?;
+            if time.elapsed() >= duration {
+                let serialized_sprites =
+                    &bincode::serialize(&Vec::from_iter(self.clients.values())).unwrap();
+                for addr in self.clients.keys() {
+                    self.socket.send_to(serialized_sprites, addr)?;
+                }
+                time = Instant::now();
+            }
+        }
+    }
+}
+
 fn main() -> std::io::Result<()> {
     let args = Args::parse();
 
-    let server_addr = String::from("127.0.0.1:") + &args.port.to_string();
-    let socket = UdpSocket::bind(&server_addr)?;
-    eprintln!("Server running on {}", server_addr);
-    let mut buf = [0; 128];
-    loop {
-        let (len, addr) = socket.recv_from(&mut buf)?;
-        dbg!(len);
-        dbg!(addr);
-        dbg!(&buf[..len]);
-        let ttt: Point2<f64> = bincode::deserialize(&buf[..len]).unwrap();
-        dbg!(ttt);
-    }
+    let mut server = Server::new(String::from("127.0.0.1:") + &args.port.to_string())?;
+    server.run()
 }

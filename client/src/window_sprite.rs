@@ -1,5 +1,3 @@
-use std::f64;
-
 use crate::Raycasting;
 
 #[derive(Debug)]
@@ -22,6 +20,11 @@ impl WindowSprite {
 pub fn get_sorted_window_sprites(raycasting: &Raycasting) -> Vec<WindowSprite> {
     let mut window_sprites = Vec::new();
     for sprite in &raycasting.sprites {
+        if let Some(client) = &raycasting.client {
+            if sprite.id == client.id {
+                continue;
+            }
+        }
         let angle_from_player = raycasting.player.get_angle_to(&sprite.position);
         if angle_from_player > raycasting.player.horizontal_fov
             || -raycasting.player.horizontal_fov > angle_from_player
@@ -35,6 +38,9 @@ pub fn get_sorted_window_sprites(raycasting: &Raycasting) -> Vec<WindowSprite> {
             (raycasting.window.width() as f64 / 2.0 + sprite_center_x_from_center).round() as i16;
         let distance = nalgebra::distance(&sprite.position, &raycasting.player.position)
             * angle_from_player.cos();
+        if distance < 1e-10 {
+            continue;
+        }
         window_sprites.push(WindowSprite::new(sprite.image_index, x, distance));
     }
     window_sprites.sort_unstable_by(|a, b| b.distance.partial_cmp(&a.distance).unwrap());
