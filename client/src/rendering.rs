@@ -2,12 +2,12 @@ use std::{cmp, f64};
 
 use common::{get_normalized_radians_angle, MAP};
 use crossterm::{style::Color, Result};
-use nalgebra::{Vector2, Vector4};
-use winterm::Window;
+use image::GenericImageView;
+use nalgebra::Vector2;
 
 use crate::{
     window_sprite::{get_sorted_window_sprites, WindowSprite},
-    Matrix16, Raycasting,
+    Raycasting,
 };
 
 fn render_column(raycasting: &mut Raycasting, x: u16, ray_angle: f64) -> Result<()> {
@@ -125,28 +125,25 @@ fn render_column(raycasting: &mut Raycasting, x: u16, ray_angle: f64) -> Result<
     Ok(())
 }
 
-fn render_window_sprite(
-    window_sprite: &WindowSprite,
-    images: &[Matrix16<Vector4<u8>>],
-    window: &mut Window,
-    z_buffer: &mut [f64],
-) -> Result<()> {
-    let image = &images[window_sprite.image_index];
-    let height = (window.height() as f64 / window_sprite.distance).round() as u16;
+fn render_window_sprite(window_sprite: &WindowSprite, raycasting: &mut Raycasting) -> Result<()> {
+    let sprite_sheet = &raycasting.sprite_sheets[window_sprite.sprite_sheet_index];
+    let height = (raycasting.window.height() as f64 / window_sprite.distance).round() as u16;
     let start_y = cmp::max(
         0,
-        ((window.height() as i32 - height as i32) as f32 / 2.0).round() as u16,
+        ((raycasting.window.height() as i32 - height as i32) as f32 / 2.0).round() as u16,
     );
     let end_y = cmp::min(
-        window.height(),
-        ((window.height() + height) as f32 / 2.0).round() as u16,
+        raycasting.window.height(),
+        ((raycasting.window.height() + height) as f32 / 2.0).round() as u16,
     );
-    let image_y_step = image.nrows() as f64 / height as f64;
+    let image_y_step = sprite_sheet.size() as f64 / height as f64;
     let start_image_y = f64::max(
         0.0,
-        -((window.height() as i32 - height as i32) as f64 / 2_f64).round() * image_y_step,
+        -((raycasting.window.height() as i32 - height as i32) as f64 / 2_f64).round()
+            * image_y_step,
     );
-    let width = (height as f32 * image.ncols() as f32 / image.nrows() as f32).round() as u16;
+    let width =
+        (height as f32 * sprite_sheet.size() as f32 / sprite_sheet.size() as f32).round() as u16;
     let start_x = cmp::max(
         0,
         (window_sprite.x as f32 - (width as f32 / 2.0) + 0.1).round() as u16,
@@ -154,32 +151,35 @@ fn render_window_sprite(
     let end_x = Ord::clamp(
         (window_sprite.x as f32 + (width as f32 / 2.0)).round() as i16,
         0,
-        window.width() as i16,
+        raycasting.window.width() as i16,
     ) as u16;
-    let image_x_step = image.ncols() as f64 / width as f64;
+    let image_x_step = sprite_sheet.size() as f64 / width as f64;
     let mut image_x = f64::max(
         0.0,
         -(window_sprite.x as f64 - (width as f64 / 2_f64) + 0.1).round() * image_x_step,
     );
     for x in start_x..end_x {
-        if window_sprite.distance > z_buffer[x as usize] {
+        if window_sprite.distance > raycasting.z_buffer[x as usize] {
             image_x += image_x_step;
             continue;
         } else {
-            z_buffer[x as usize] = window_sprite.distance;
+            raycasting.z_buffer[x as usize] = window_sprite.distance;
         }
         let mut image_y = start_image_y;
         for y in start_y..end_y {
-            let color = &image[(image_y as usize, image_x as usize)];
-            if color.w != u8::MAX {
+            let color = &sprite_sheet
+                .image()
+                .get_pixel(image_x as u32, image_y as u32 + window_sprite.sprite_sheet_y_offset);
+            if color[3] != u8::MAX {
+                image_y += image_y_step;
                 continue;
             }
             let terminal_color = Color::Rgb {
-                r: color.x,
-                g: color.y,
-                b: color.z,
+                r: color[0],
+                g: color[1],
+                b: color[2],
             };
-            window.set_pixel(y, x, terminal_color);
+            raycasting.window.set_pixel(y, x, terminal_color);
             image_y += image_y_step;
         }
         image_x += image_x_step;
@@ -199,12 +199,7 @@ pub fn render(raycasting: &mut Raycasting) -> Result<()> {
     }
     let sorted_window_sprites = get_sorted_window_sprites(raycasting);
     for window_sprite in sorted_window_sprites {
-        render_window_sprite(
-            &window_sprite,
-            &raycasting.images,
-            &mut raycasting.window,
-            &mut raycasting.z_buffer,
-        )?;
+        render_window_sprite(&window_sprite, raycasting)?;
     }
     raycasting.window.redraw()?;
     Ok(())

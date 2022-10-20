@@ -1,14 +1,15 @@
 use clap::Parser;
 use crossterm::{event::KeyCode, Result};
-use nalgebra::{ArrayStorage, Const, Matrix, Point2, Vector3, Vector4};
-use std::io;
+use nalgebra::Point2;
+use sprite_sheet::SpriteSheet;
+use std::io::{self, Cursor};
 use std::net::{ToSocketAddrs, UdpSocket};
 use std::{f64, time::Instant};
-type Matrix16<T> = Matrix<T, Const<16>, Const<16>, ArrayStorage<T, 16, 16>>;
 use winterm::Window;
 
 mod player;
 mod rendering;
+mod sprite_sheet;
 mod window_sprite;
 
 use common::{get_normalized_radians_angle, sprite::Sprite};
@@ -23,44 +24,16 @@ struct Args {
     server_address: Option<String>,
 }
 
-fn fill_test_image(image: &mut Matrix16<Vector4<u8>>) {
-    let colors = vec![
-        Vector3::new(255.0, 0.0, 0.0),
-        Vector3::new(255.0, 63.0, 0.0),
-        Vector3::new(255.0, 127.0, 0.0),
-        Vector3::new(255.0, 191.0, 0.0),
-        Vector3::new(255.0, 255.0, 0.0),
-        Vector3::new(191.0, 255.0, 0.0),
-        Vector3::new(127.0, 255.0, 0.0),
-        Vector3::new(63.0, 255.0, 0.0),
-        Vector3::new(0.0, 255.0, 0.0),
-        Vector3::new(0.0, 255.0, 127.0),
-        Vector3::new(0.0, 255.0, 255.0),
-        Vector3::new(0.0, 127.0, 255.0),
-        Vector3::new(0.0, 0.0, 255.0),
-        Vector3::new(127.0, 0.0, 255.0),
-        Vector3::new(255.0, 0.0, 255.0),
-        Vector3::new(255.0, 0.0, 127.0),
-    ];
-    for x in 0..image.ncols() {
-        let multiplier = ((x + 1) as f64 / image.ncols() as f64) * 0.75 + 0.25;
-        for y in 0..image.nrows() {
-            let color = colors[y] * multiplier;
-            image[(y, x)] = Vector4::new(color.x as u8, color.y as u8, color.z as u8, 255);
-        }
-    }
-}
-
 pub struct Client {
     socket: UdpSocket,
     id: u32,
 }
 
 impl Client {
-    fn new<A: ToSocketAddrs>(addr: A, position: &Point2<f64>) -> io::Result<Self> {
+    fn new<A: ToSocketAddrs>(addr: A, position: &Point2<f64>, angle: f64) -> io::Result<Self> {
         let socket = UdpSocket::bind("0.0.0.0:0")?;
         socket.connect(addr)?;
-        socket.send(&bincode::serialize(&position).unwrap())?;
+        socket.send(&bincode::serialize(&(position, angle)).unwrap())?;
         // TODO: resend until id is received
         let mut buf = [0; 128];
         let len = socket.recv(&mut buf)?;
@@ -75,7 +48,7 @@ pub struct Raycasting {
     client: Option<Client>,
     player: Player,
     sprites: Vec<Sprite>,
-    images: Vec<Matrix16<Vector4<u8>>>,
+    sprite_sheets: Vec<SpriteSheet>,
     z_buffer: Vec<f64>,
     should_stop: bool,
 }
@@ -84,25 +57,26 @@ impl Raycasting {
     fn new(server_address: Option<&str>) -> Result<Self> {
         let height = 45;
         let width = 80;
-        let mut image = Matrix16::zeros();
-        fill_test_image(&mut image);
         let position = Point2::new(3.0, 4.0);
+        let angle = 180.0_f64.to_radians();
         let (client, sprites) = match server_address {
-            Some(addr) => (Some(Client::new(addr, &position)?), vec![]),
+            Some(addr) => (Some(Client::new(addr, &position, angle)?), vec![]),
             None => (
                 None,
                 vec![
-                    Sprite::new(0, Point2::new(4.0, 6.0), 0),
-                    Sprite::new(1, Point2::new(6.9, 4.0), 0),
+                    Sprite::new(0, Point2::new(4.0, 6.0), 0, Some(90.0_f64.to_radians())),
+                    Sprite::new(1, Point2::new(6.9, 4.0), 0, None),
                 ],
             ),
         };
         Ok(Self {
             window: Window::new(height, width)?,
-            player: Player::new(position, 180.0_f64.to_radians(), 60.0_f64.to_radians()),
+            player: Player::new(position, angle, 60.0_f64.to_radians()),
             client,
             sprites,
-            images: vec![image],
+            sprite_sheets: vec![SpriteSheet::new(Cursor::new(include_bytes!(
+                "../assets/penguin.png"
+            )))],
             z_buffer: vec![0.0; width.into()],
             should_stop: false,
         })
@@ -124,7 +98,7 @@ impl Raycasting {
             }?;
             client
                 .socket
-                .send(&bincode::serialize(&self.player.position).unwrap())?;
+                .send(&bincode::serialize(&(&self.player.position, self.player.angle)).unwrap())?;
         }
         Ok(())
     }
@@ -194,10 +168,13 @@ impl Raycasting {
     }
 }
 
-fn main() -> Result<()> {
-    let args = Args::parse();
-
+fn raycasting(args: Args) -> Result<()> {
     let mut raycasting = Raycasting::new(args.server_address.as_deref())?;
     raycasting.run()?;
     Ok(())
+}
+
+fn main() -> Result<()> {
+    let args = Args::parse();
+    raycasting(args)
 }

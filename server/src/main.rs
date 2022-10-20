@@ -34,11 +34,11 @@ impl Server {
     }
 
     fn handle_message(&mut self, buf: &[u8], addr: SocketAddr) -> std::io::Result<()> {
-        let position = bincode::deserialize(buf).unwrap();
+        let (position, angle) = bincode::deserialize(buf).unwrap();
         match self.clients.get_mut(&addr) {
             None => {
                 self.clients
-                    .insert(addr, Sprite::new(self.next_id, position, 0));
+                    .insert(addr, Sprite::new(self.next_id, position, 0, Some(angle)));
                 self.socket
                     .send_to(&bincode::serialize(&self.next_id).unwrap(), addr)?;
                 // TODO: resend until id is received
@@ -46,6 +46,7 @@ impl Server {
             }
             Some(sprite) => {
                 sprite.position = position;
+                sprite.angle = Some(angle);
             }
         }
         Ok(())
@@ -57,7 +58,7 @@ impl Server {
         let duration = Duration::from_secs_f64(1.0 / 30.0);
 
         println!("Server running on {}", self.socket.local_addr()?);
-        loop {
+        loop { // TODO: remove clients if their last update exceeds a time limit
             match self.socket.recv_from(&mut buf) {
                 Ok((len, addr)) => self.handle_message(&buf[..len], addr),
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => Ok(()),

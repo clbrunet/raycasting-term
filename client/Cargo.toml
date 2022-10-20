@@ -11,3 +11,4 @@ crossterm = "0.24.0"
 nalgebra.workspace = true
 serde.workspace = true
 winterm = "0.5.0"
+image = "0.24.4"
